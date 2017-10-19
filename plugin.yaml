@@ -1,0 +1,51 @@
+name: awsecs-plugin
+version: 0.0.1
+rundeckPluginVersion: 1.2
+author: hiroyuki oyama
+date: Wed Oct 18 16:00:02 JST 2017
+providers:
+  - name: awsecs-workflow-node-step
+    service: WorkflowNodeStep
+    title: AWS / ECS / task / run
+    description: 'dispatch the command to the ecs container'
+    plugin-type: script
+    script-interpreter: python
+    script-file: task-run
+    script-args: -c ${config.cluster} ${config.image} "${config.command}"
+    config:
+      - type: String
+        name: cluster
+        title: 'ecs-cluster'
+        description: "AWS ECS Cluster"
+        required: true
+      - type: String
+        name: image
+        title: 'image'
+        description: "The container image identifier"
+        required: true
+      - type: String
+        name: command
+        title: 'command'
+        description: "the bash string to execute in the container"
+        required: true
+      - type: String
+        name: access_key
+        title: access_key
+        description: 'Access Key ID'
+        renderingOptions:
+          grouping: secondary
+          groupName: Connection
+      - type: String
+        name: secret_access_key
+        title: secret_access_key
+        description: 'Secret access Key'
+        renderingOptions:
+          grouping: secondary
+          groupName: Connection
+      - type: String
+        name: default_region
+        title: Default region
+        description: 'The default AWS region'
+        renderingOptions:
+          grouping: secondary
+          groupName: Connection

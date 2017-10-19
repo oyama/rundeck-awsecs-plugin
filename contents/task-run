@@ -1,0 +1,106 @@
+# -*- coding: utf-8 -*-
+
+from __future__ import print_function
+import argparse
+import os
+import signal
+import sys
+import time
+import ecs
+
+
+class RundeckPluginAwsEcsTask:
+    def __init__(self):
+        self.to_exit = False
+
+    def exit_gracefully(self, signum, frame):
+        self.to_exit = True
+
+    def run(self, argv=sys.argv):
+        parser = argparse.ArgumentParser(
+            description='Amazon ECS Task running tool')
+        parser.add_argument('--verbose',
+                            action="store_true", default=False,
+                            help="set verbose mode.")
+        parser.add_argument('-c', '--cluster',
+                            default='docker-ondemand-staging',
+                            help='set EC2 Container Service cluster name.')
+        parser.add_argument('-n', '--name',
+                            help='set task name.')
+        parser.add_argument('image',
+                            help='docker image name')
+        parser.add_argument('command',
+                            help='run commands at container')
+        args = parser.parse_args()
+
+        cmd = args.command
+        if 'RD_CONFIG_COMMAND' in os.environ:
+            cmd = os.environ['RD_CONFIG_COMMAND']
+        region = 'ap-northeast-1'
+        if 'RD_CONFIG_DEFAULT_REGION' in os.environ:
+            region = os.environ['RD_CONFIG_DEFAULT_REGION']
+        aws_access_key_id = None
+        if 'RD_CONFIG_ACCESS_KEY' in os.environ:
+            aws_access_key_id = os.environ['RD_CONFIG_ACCESS_KEY']
+        aws_secret_access_key = None
+        if 'RD_CONFIG_SECRET_ACCESS_KEY' in os.environ:
+            aws_secret_access_key = os.environ['RD_CONFIG_SECRET_ACCESS_KEY']
+        task = ecs.Task(name=args.name, cluster=args.cluster,
+                        image=args.image, cmd=cmd,
+                        region=region,
+                        aws_access_key_id=aws_access_key_id,
+                        aws_secret_access_key=aws_secret_access_key)
+   
+        if not task.start(verbose=args.verbose):
+            print('cannot start task', file=sys.stderr)
+            exit(255)
+    
+        sleep_count = 0
+        wait = 1
+        log_start_at = 0
+        while not task.is_finished():
+            if self.to_exit:
+                break
+            if wait < 60 and sleep_count % 10 == 0:
+                wait *= 2
+            if wait > 60:
+                wait = 60
+            try: 
+                for l in task.get_logs(start_at=log_start_at):
+                    print(l['message'])
+                    log_start_at = l['timestamp']
+            except task.logs.exceptions.ResourceNotFoundException:
+                print('log resource not found', file=sys.stderr)
+                exit(255)
+ 
+            time.sleep(wait)
+            sleep_count += 1
+        if self.to_exit:
+            task.stop()
+            print('Please wait 30 seconds for finish.\n',
+                  ('If you need more quick, change the ECS_CONTAINER_STOP_TIMEOUT'
+                   ' variable in ECS container agent.'),
+                  file=sys.stderr)
+            while not task.is_finished():
+                time.sleep(1)
+            for l in task.get_logs(start_at=log_start_at):
+                print(l['message'])
+            exit(130)
+    
+        status = task.exit_code()
+        if status is None:
+            exit(255)
+        if 'reason' in status:
+            print(status['reason'], file=sys.stderr)
+        if 'failures' in status and len(status['failures']) > 0:
+            print(status['failures'], file=sys.stderr)
+        for l in task.get_logs(start_at=log_start_at):
+            print(l['message'])
+        exit(status['exitCode'])
+    
+
+if __name__ == '__main__':
+    cli = RundeckPluginAwsEcsTask()
+    signal.signal(signal.SIGINT, (lambda num, frame: cli.exit_gracefully(num, frame)))
+    signal.signal(signal.SIGTERM, (lambda num, frame: cli.exit_gracefully(num, frame)))
+    cli.run(sys.argv)
