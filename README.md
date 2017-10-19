@@ -9,7 +9,7 @@ Three providers in this plugin:
 
 Run the following commands to install the plugins:
 
-    sudo -u rundeck pip install --user rundeck-awsecs-plugin/requirements.txt
+    pip install rundeck-awsecs-plugin/requirements.txt
     zip -r rundeck-awsecs-plugin.zip rundeck-awsecs-plugin
     cp rundeck-awsecs-plugin.zip $RDECK_BASE/libext
 
